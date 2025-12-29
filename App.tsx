@@ -1,4 +1,3 @@
-
 import { UserData, DocumentResult, PackageType, JobRole } from './types';
 import { generateJobDocuments } from './services/geminiService';
 import { PRICING, RAZORPAY_KEY_ID } from './constants';
@@ -60,8 +59,11 @@ const Builder = () => {
   const [isCheckout, setIsCheckout] = useState(false);
   const [isProcessingOrder, setIsProcessingOrder] = useState(false);
 
-  const [paidIdentifiers, setPaidIdentifiers] = useState<string[]>(() => JSON.parse(localStorage.getItem(btoa('jdp_v2_paid_ids')) || '[]'));
-  const [creditsMap, setCreditsMap] = useState<Record<string, number>>(() => JSON.parse(localStorage.getItem(btoa('jdp_v2_credits_log')) || '{}'));
+  const ID_KEY = btoa('jdp_v2_paid_ids');
+  const CREDITS_KEY = btoa('jdp_v2_credits_log');
+
+  const [paidIdentifiers, setPaidIdentifiers] = useState<string[]>(() => JSON.parse(localStorage.getItem(ID_KEY) || '[]'));
+  const [creditsMap, setCreditsMap] = useState<Record<string, number>>(() => JSON.parse(localStorage.getItem(CREDITS_KEY) || '{}'));
 
   const getIdentifier = (email: string, phone: string) => `${email.toLowerCase().trim()}_${phone.trim()}`;
   const currentId = userData ? getIdentifier(userData.email, userData.phone) : '';
@@ -70,20 +72,18 @@ const Builder = () => {
 
   useEffect(() => {
     if (userData) localStorage.setItem('jdp_draft', JSON.stringify(userData));
-    localStorage.setItem(btoa('jdp_v2_paid_ids'), JSON.stringify(paidIdentifiers));
-    localStorage.setItem(btoa('jdp_v2_credits_log'), JSON.stringify(creditsMap));
+    localStorage.setItem(ID_KEY, JSON.stringify(paidIdentifiers));
+    localStorage.setItem(CREDITS_KEY, JSON.stringify(creditsMap));
   }, [userData, paidIdentifiers, creditsMap]);
 
   const onFormSubmit = async (data: UserData) => {
     const id = getIdentifier(data.email, data.phone);
     setUserData(data);
     setIsGenerating(true);
-    setResult(null);
 
     try {
       const generated = await generateJobDocuments(data, id);
       setResult(generated);
-      setPaidIdentifiers(prev => prev.includes(id) ? prev : [...prev, id]);
       if (generated.remainingCredits !== undefined) setCreditsMap(prev => ({ ...prev, [id]: generated.remainingCredits! }));
       window.scrollTo(0, 0);
     } catch (e: any) {
@@ -97,9 +97,7 @@ const Builder = () => {
   const handleRazorpayCheckout = async () => {
     if (!userData || !selectedPackage) return;
     setIsProcessingOrder(true);
-
     try {
-      // 1. Securely Create Order on Server
       const orderRes = await fetch('/api/create-order', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -108,7 +106,6 @@ const Builder = () => {
       const order = await orderRes.json();
       if (!orderRes.ok) throw new Error(order.error);
 
-      // 2. Open Razorpay
       const rzp = (window as any).Razorpay;
       const options = {
         key: RAZORPAY_KEY_ID,
@@ -163,11 +160,10 @@ const Builder = () => {
     <Layout>
       <div className="max-w-5xl mx-auto py-10 px-4 min-h-[60vh]">
         {isGenerating && (
-          <div className="fixed inset-0 z-[60] bg-white/90 backdrop-blur-md flex items-center justify-center animate-fadeIn">
+          <div className="fixed inset-0 z-[60] bg-white/90 backdrop-blur-md flex items-center justify-center">
             <div className="text-center">
               <div className="w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-6"></div>
-              <h2 className="text-2xl font-black mb-2 tracking-tight">AI Sandbox Running...</h2>
-              <p className="text-gray-500 font-medium">Delivering Secure Content</p>
+              <h2 className="text-2xl font-black mb-2">Generating Securely...</h2>
             </div>
           </div>
         )}
@@ -181,14 +177,14 @@ const Builder = () => {
 
       {isCheckout && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fadeIn">
-          <div className="bg-white p-12 rounded-[3rem] max-w-xl w-full text-center shadow-2xl border border-blue-100">
-            <h2 className="text-3xl font-black mb-6 tracking-tight">Complete Checkout</h2>
-            <div className="bg-blue-600 p-8 rounded-3xl mb-8 text-white shadow-lg">
+          <div className="bg-white p-12 rounded-[3rem] max-w-xl w-full text-center shadow-2xl">
+            <h2 className="text-3xl font-black mb-6">Unlock Documents</h2>
+            <div className="bg-blue-600 p-8 rounded-3xl mb-8 text-white">
                <div className="text-6xl font-black tracking-tighter">₹{PRICING[selectedPackage].price}</div>
-               <div className="text-xs font-bold uppercase tracking-widest mt-2 opacity-70">Server-Side Verified Price</div>
+               <div className="text-xs font-bold uppercase tracking-widest mt-2 opacity-70">Secured via Razorpay</div>
             </div>
             <button disabled={isProcessingOrder} onClick={handleRazorpayCheckout} className="w-full bg-blue-600 text-white py-5 rounded-2xl font-black text-xl hover:bg-blue-700 shadow-xl disabled:opacity-50">
-              {isProcessingOrder ? 'Securing Link...' : 'Pay Securely'}
+              {isProcessingOrder ? 'Securing...' : 'Pay & Download Now'}
             </button>
             <button onClick={() => setIsCheckout(false)} className="mt-4 text-gray-400 font-bold text-xs uppercase tracking-widest">Return to Editor</button>
           </div>
