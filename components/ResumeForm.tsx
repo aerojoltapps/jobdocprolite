@@ -1,15 +1,15 @@
-
 import React, { useState } from 'react';
 import { JobRole, UserData } from '../types';
 
 interface Props {
   onSubmit: (data: UserData) => void;
   isLoading: boolean;
+  initialData?: UserData | null;
 }
 
-const ResumeForm: React.FC<Props> = ({ onSubmit, isLoading }) => {
+const ResumeForm: React.FC<Props> = ({ onSubmit, isLoading, initialData }) => {
   const [step, setStep] = useState(1);
-  const [formData, setFormData] = useState<UserData>({
+  const [formData, setFormData] = useState<UserData>(initialData || {
     fullName: '',
     email: '',
     phone: '',
@@ -26,6 +26,7 @@ const ResumeForm: React.FC<Props> = ({ onSubmit, isLoading }) => {
     const newErrors: string[] = [];
     if (currentStep === 1) {
       if (!formData.fullName.trim()) newErrors.push("Name is required");
+      if (formData.fullName.length > 100) newErrors.push("Name is too long");
       if (!formData.email.trim() || !formData.email.includes('@')) newErrors.push("Valid email is required");
       if (!formData.phone.trim()) newErrors.push("Phone number is required");
     }
@@ -64,11 +65,21 @@ const ResumeForm: React.FC<Props> = ({ onSubmit, isLoading }) => {
 
   const addEducation = () => setFormData(prev => ({ ...prev, education: [...prev.education, { degree: '', college: '', year: '', percentage: '' }] }));
   const addExperience = () => setFormData(prev => ({ ...prev, experience: [...prev.experience, { title: '', company: '', duration: '', description: '' }] }));
-  const addSkill = () => setFormData(prev => ({ ...prev, skills: [...prev.skills, ''] }));
+  const addSkill = () => {
+    if (formData.skills.length >= 20) return;
+    setFormData(prev => ({ ...prev, skills: [...prev.skills, ''] }));
+  };
 
   const removeEducation = (index: number) => setFormData(prev => ({ ...prev, education: prev.education.filter((_, i) => i !== index) }));
   const removeExperience = (index: number) => setFormData(prev => ({ ...prev, experience: prev.experience.filter((_, i) => i !== index) }));
   const removeSkill = (index: number) => setFormData(prev => ({ ...prev, skills: prev.skills.filter((_, i) => i !== index) }));
+
+  const handleClearData = () => {
+    if (window.confirm("This will permanently delete your resume drafts and data from this browser. Proceed?")) {
+      localStorage.clear();
+      window.location.href = '/';
+    }
+  };
 
   const handleSubmit = () => {
     if (!validateStep(step)) return;
@@ -87,9 +98,17 @@ const ResumeForm: React.FC<Props> = ({ onSubmit, isLoading }) => {
   return (
     <div className="bg-white rounded-xl shadow-lg p-6 md:p-8">
       {/* Privacy Badge */}
-      <div className="flex items-center justify-center gap-2 mb-6 bg-green-50 py-2 px-4 rounded-full w-fit mx-auto border border-green-100">
-        <span className="text-green-600 text-sm font-bold">🛡️ Privacy Shield Active:</span>
-        <span className="text-green-800 text-xs font-medium">Your data is never stored on our servers.</span>
+      <div className="flex flex-col sm:flex-row items-center justify-center gap-2 mb-8 bg-green-50 py-3 px-6 rounded-2xl w-full border border-green-100">
+        <div className="flex items-center gap-2">
+          <span className="text-green-600 text-sm font-bold">🛡️ Privacy Shield Active:</span>
+          <span className="text-green-800 text-xs font-medium">Your data stays in your browser.</span>
+        </div>
+        <button 
+          onClick={handleClearData}
+          className="text-[10px] font-black uppercase tracking-widest text-red-600 hover:underline sm:ml-4"
+        >
+          Clear Data Now
+        </button>
       </div>
 
       <div className="flex mb-8">
@@ -111,19 +130,19 @@ const ResumeForm: React.FC<Props> = ({ onSubmit, isLoading }) => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label htmlFor="fullName" className="block text-sm font-medium mb-1">Full Name</label>
-              <input id="fullName" name="fullName" value={formData.fullName} onChange={handleChange} className="w-full border p-2 rounded focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Rahul Sharma" />
+              <input id="fullName" name="fullName" maxLength={100} value={formData.fullName} onChange={handleChange} className="w-full border p-2 rounded focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Rahul Sharma" />
             </div>
             <div>
               <label htmlFor="email" className="block text-sm font-medium mb-1">Email</label>
-              <input id="email" type="email" name="email" value={formData.email} onChange={handleChange} className="w-full border p-2 rounded focus:ring-2 focus:ring-blue-500 outline-none" placeholder="rahul@example.com" />
+              <input id="email" type="email" name="email" maxLength={100} value={formData.email} onChange={handleChange} className="w-full border p-2 rounded focus:ring-2 focus:ring-blue-500 outline-none" placeholder="rahul@example.com" />
             </div>
             <div>
               <label htmlFor="phone" className="block text-sm font-medium mb-1">Phone Number</label>
-              <input id="phone" name="phone" value={formData.phone} onChange={handleChange} className="w-full border p-2 rounded focus:ring-2 focus:ring-blue-500 outline-none" placeholder="+91 99999 88888" />
+              <input id="phone" name="phone" maxLength={20} value={formData.phone} onChange={handleChange} className="w-full border p-2 rounded focus:ring-2 focus:ring-blue-500 outline-none" placeholder="+91 99999 88888" />
             </div>
             <div>
               <label htmlFor="location" className="block text-sm font-medium mb-1">Location (City, State)</label>
-              <input id="location" name="location" value={formData.location} onChange={handleChange} className="w-full border p-2 rounded focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Indore, MP" />
+              <input id="location" name="location" maxLength={100} value={formData.location} onChange={handleChange} className="w-full border p-2 rounded focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Indore, MP" />
             </div>
             <div className="md:col-span-2">
               <label htmlFor="jobRole" className="block text-sm font-medium mb-1">Target Job Role</label>
@@ -143,15 +162,17 @@ const ResumeForm: React.FC<Props> = ({ onSubmit, isLoading }) => {
               {formData.education.length > 1 && (
                 <button onClick={() => removeEducation(idx)} className="absolute top-2 right-2 text-gray-400 hover:text-red-500 transition-colors">✕</button>
               )}
-              <input placeholder="Degree (e.g. B.Tech CS)" value={edu.degree} onChange={e => handleEducationChange(idx, 'degree', e.target.value)} className="w-full border p-2 rounded" />
-              <input placeholder="College/University" value={edu.college} onChange={e => handleEducationChange(idx, 'college', e.target.value)} className="w-full border p-2 rounded" />
+              <input placeholder="Degree (e.g. B.Tech CS)" maxLength={100} value={edu.degree} onChange={e => handleEducationChange(idx, 'degree', e.target.value)} className="w-full border p-2 rounded" />
+              <input placeholder="College/University" maxLength={150} value={edu.college} onChange={e => handleEducationChange(idx, 'college', e.target.value)} className="w-full border p-2 rounded" />
               <div className="flex gap-2">
-                <input placeholder="Year" value={edu.year} onChange={e => handleEducationChange(idx, 'year', e.target.value)} className="flex-1 border p-2 rounded" />
-                <input placeholder="Percentage/CGPA" value={edu.percentage} onChange={e => handleEducationChange(idx, 'percentage', e.target.value)} className="flex-1 border p-2 rounded" />
+                <input placeholder="Year" maxLength={10} value={edu.year} onChange={e => handleEducationChange(idx, 'year', e.target.value)} className="flex-1 border p-2 rounded" />
+                <input placeholder="Percentage/CGPA" maxLength={10} value={edu.percentage} onChange={e => handleEducationChange(idx, 'percentage', e.target.value)} className="flex-1 border p-2 rounded" />
               </div>
             </div>
           ))}
-          <button onClick={addEducation} className="text-blue-600 font-medium hover:underline">+ Add More Education</button>
+          {formData.education.length < 5 && (
+            <button onClick={addEducation} className="text-blue-600 font-medium hover:underline">+ Add More Education</button>
+          )}
         </div>
       )}
 
@@ -164,13 +185,15 @@ const ResumeForm: React.FC<Props> = ({ onSubmit, isLoading }) => {
                {formData.experience.length > 1 && (
                 <button onClick={() => removeExperience(idx)} className="absolute top-2 right-2 text-gray-400 hover:text-red-500 transition-colors">✕</button>
               )}
-              <input placeholder="Job Title / Role" value={exp.title} onChange={e => handleExperienceChange(idx, 'title', e.target.value)} className="w-full border p-2 rounded" />
-              <input placeholder="Company Name" value={exp.company} onChange={e => handleExperienceChange(idx, 'company', e.target.value)} className="w-full border p-2 rounded" />
-              <input placeholder="Duration (e.g. June 2022 - Present)" value={exp.duration} onChange={e => handleExperienceChange(idx, 'duration', e.target.value)} className="w-full border p-2 rounded" />
-              <textarea placeholder="Briefly describe what you did" value={exp.description} onChange={e => handleExperienceChange(idx, 'description', e.target.value)} className="w-full border p-2 rounded h-20" />
+              <input placeholder="Job Title / Role" maxLength={100} value={exp.title} onChange={e => handleExperienceChange(idx, 'title', e.target.value)} className="w-full border p-2 rounded" />
+              <input placeholder="Company Name" maxLength={100} value={exp.company} onChange={e => handleExperienceChange(idx, 'company', e.target.value)} className="w-full border p-2 rounded" />
+              <input placeholder="Duration (e.g. June 2022 - Present)" maxLength={50} value={exp.duration} onChange={e => handleExperienceChange(idx, 'duration', e.target.value)} className="w-full border p-2 rounded" />
+              <textarea placeholder="Briefly describe what you did" maxLength={500} value={exp.description} onChange={e => handleExperienceChange(idx, 'description', e.target.value)} className="w-full border p-2 rounded h-20" />
             </div>
           ))}
-          <button onClick={addExperience} className="text-blue-600 font-medium hover:underline">+ Add More Experience</button>
+          {formData.experience.length < 8 && (
+            <button onClick={addExperience} className="text-blue-600 font-medium hover:underline">+ Add More Experience</button>
+          )}
         </div>
       )}
 
@@ -180,14 +203,16 @@ const ResumeForm: React.FC<Props> = ({ onSubmit, isLoading }) => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {formData.skills.map((skill, idx) => (
               <div key={idx} className="flex gap-2">
-                <input placeholder="e.g. Communication" value={skill} onChange={e => handleSkillChange(idx, e.target.value)} className="flex-grow border p-2 rounded" />
+                <input placeholder="e.g. Communication" maxLength={40} value={skill} onChange={e => handleSkillChange(idx, e.target.value)} className="flex-grow border p-2 rounded" />
                 {formData.skills.length > 1 && (
                    <button onClick={() => removeSkill(idx)} className="text-gray-400 hover:text-red-500 transition-colors px-2">✕</button>
                 )}
               </div>
             ))}
           </div>
-          <button onClick={addSkill} className="text-blue-600 font-medium hover:underline">+ Add More Skills</button>
+          {formData.skills.length < 20 && (
+            <button onClick={addSkill} className="text-blue-600 font-medium hover:underline">+ Add More Skills</button>
+          )}
         </div>
       )}
 
