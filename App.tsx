@@ -1,7 +1,7 @@
 import { UserData, DocumentResult, PackageType, JobRole } from './types';
 import { generateJobDocuments } from './services/geminiService';
 import { PRICING, RAZORPAY_KEY_ID } from './constants';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { HashRouter as Router, Routes, Route, Link, useSearchParams } from 'react-router-dom';
 import Layout from './components/Layout';
 import ResumeForm from './components/ResumeForm';
@@ -59,6 +59,9 @@ const Builder = () => {
   const [isCheckout, setIsCheckout] = useState(false);
   const [isProcessingOrder, setIsProcessingOrder] = useState(false);
 
+  // Ref to store data during payment transition
+  const pendingDataRef = useRef<UserData | null>(null);
+
   const ID_KEY = btoa('jdp_v2_paid_ids');
   const CREDITS_KEY = btoa('jdp_v2_credits_log');
 
@@ -79,23 +82,40 @@ const Builder = () => {
   const onFormSubmit = async (data: UserData) => {
     const id = getIdentifier(data.email, data.phone);
     setUserData(data);
+    pendingDataRef.current = data;
     setIsGenerating(true);
 
     try {
       const generated = await generateJobDocuments(data, id);
       setResult(generated);
-      if (generated.remainingCredits !== undefined) setCreditsMap(prev => ({ ...prev, [id]: generated.remainingCredits! }));
+      
+      // Automatic Access Restore: If the call succeeds, the user is recognized as paid
+      if (!paidIdentifiers.includes(id)) {
+        setPaidIdentifiers(prev => [...prev, id]);
+      }
+
+      if (generated.remainingCredits !== undefined) {
+        setCreditsMap(prev => ({ ...prev, [id]: generated.remainingCredits! }));
+      }
+      
+      setIsCheckout(false);
       window.scrollTo(0, 0);
     } catch (e: any) {
-      if (e.message.includes('Payment Required')) setIsCheckout(true);
-      else alert(e.message);
+      // 402 or "Payment Required" message triggers the checkout
+      if (e.message.includes('Payment Required') || e.message.includes('402')) {
+        setIsCheckout(true);
+      } else {
+        alert(e.message);
+      }
     } finally {
       setIsGenerating(false);
     }
   };
 
   const handleRazorpayCheckout = async () => {
-    if (!userData || !selectedPackage) return;
+    const dataToUse = pendingDataRef.current || userData;
+    if (!dataToUse || !selectedPackage) return;
+    
     setIsProcessingOrder(true);
     try {
       const orderRes = await fetch('/api/create-order', {
@@ -118,7 +138,7 @@ const Builder = () => {
           const sync = await fetch('/api/verify', {
             method: 'POST',
             body: JSON.stringify({
-              identifier: currentId,
+              identifier: getIdentifier(dataToUse.email, dataToUse.phone),
               paymentId: response.razorpay_payment_id,
               orderId: response.razorpay_order_id,
               signature: response.razorpay_signature,
@@ -126,13 +146,12 @@ const Builder = () => {
             })
           });
           if (sync.ok) {
-            setPaidIdentifiers(prev => [...prev, currentId]);
-            setCreditsMap(prev => ({ ...prev, [currentId]: 3 }));
+            // Access will be officially added via local state and confirmed by next onFormSubmit
             setIsCheckout(false);
-            onFormSubmit(userData);
+            onFormSubmit(dataToUse);
           }
         },
-        prefill: { name: userData.fullName, email: userData.email, contact: userData.phone },
+        prefill: { name: dataToUse.fullName, email: dataToUse.email, contact: dataToUse.phone },
         theme: { color: "#2563eb" }
       };
       new rzp(options).open();
@@ -159,6 +178,7 @@ const Builder = () => {
   return (
     <Layout>
       <div className="max-w-5xl mx-auto py-10 px-4 min-h-[60vh]">
+        {/* Loading Overlay: Keeps form mounted to prevent Step resets */}
         {isGenerating && (
           <div className="fixed inset-0 z-[60] bg-white/90 backdrop-blur-md flex items-center justify-center">
             <div className="text-center">
@@ -167,9 +187,17 @@ const Builder = () => {
             </div>
           </div>
         )}
+
         {result && userData ? (
-          <DocumentPreview user={userData} result={result} packageType={selectedPackage} isPreview={!isPaid} onUnlock={() => setIsCheckout(true)} 
-            onRefine={isPaid ? (f: string) => onFormSubmit({ ...userData, refinementFeedback: f }) : undefined} remainingCredits={remainingCredits} />
+          <DocumentPreview 
+            user={userData} 
+            result={result} 
+            packageType={selectedPackage} 
+            isPreview={!isPaid} 
+            onUnlock={() => setIsCheckout(true)} 
+            onRefine={isPaid ? (f: string) => onFormSubmit({ ...userData, refinementFeedback: f }) : undefined} 
+            remainingCredits={remainingCredits} 
+          />
         ) : (
           <ResumeForm onSubmit={onFormSubmit} isLoading={isGenerating} initialData={userData} />
         )}
@@ -183,7 +211,11 @@ const Builder = () => {
                <div className="text-6xl font-black tracking-tighter">₹{PRICING[selectedPackage].price}</div>
                <div className="text-xs font-bold uppercase tracking-widest mt-2 opacity-70">Secured via Razorpay</div>
             </div>
-            <button disabled={isProcessingOrder} onClick={handleRazorpayCheckout} className="w-full bg-blue-600 text-white py-5 rounded-2xl font-black text-xl hover:bg-blue-700 shadow-xl disabled:opacity-50">
+            <button 
+              disabled={isProcessingOrder} 
+              onClick={handleRazorpayCheckout} 
+              className="w-full bg-blue-600 text-white py-5 rounded-2xl font-black text-xl hover:bg-blue-700 shadow-xl disabled:opacity-50"
+            >
               {isProcessingOrder ? 'Securing...' : 'Pay & Download Now'}
             </button>
             <button onClick={() => setIsCheckout(false)} className="mt-4 text-gray-400 font-bold text-xs uppercase tracking-widest">Return to Editor</button>
